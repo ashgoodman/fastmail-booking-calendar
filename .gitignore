@@ -6,3 +6,7 @@ wrangler.toml
 .wrangler/
 node_modules/
 .DS_Store
+
+# Test and build output
+wrangler.test.toml
+.build/

@@ -1,5 +1,7 @@
 # Fastmail Booking Calendar
 
+[![CI](https://github.com/ashgoodman/fastmail-booking-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/ashgoodman/fastmail-booking-calendar/actions/workflows/ci.yml)
+
 A self-hosted booking page for your Fastmail calendar, like Calendly. Guests pick a meeting type and a free time, answer your questions, and the booking lands straight on your Fastmail calendar with an invite or a confirmation email. Each booking can get its own video-call link.
 
 It runs on Cloudflare Workers and stays within Cloudflare's free plan for personal use. There's nothing to install for guests: they just open a link.
@@ -55,7 +57,7 @@ It runs on Cloudflare Workers and stays within Cloudflare's free plan for person
 
 - **A Fastmail account on a Standard plan or higher.** The Basic plan can't create the app password needed for calendar access.
 - **A Cloudflare account.** The free plan is enough.
-- **Node.js 20 or newer** on the computer you set it up from.
+- **Node.js 22 or newer** on the computer you set it up from.
 - Optional: a domain on Cloudflare, if you want the pages on your own address.
 
 ## Installation
@@ -315,11 +317,15 @@ public/
   admin/index.html    owner settings page
   style.css
 migrations/           D1 database schema
-test/                 tests for the booking rules (npm test)
+test/                 unit tests (npm test); test/integration/ runs the real server
 ```
 
-- `npm test` runs the rule tests.
+- `npm test` runs the unit tests: booking rules and the Fastmail code against recorded server replies.
+- `npm run test:integration` starts the real server locally on the stand-in calendar and books through it.
+- `npm run check` confirms the server bundles for deployment.
 - `npm run dev` runs locally with the stand-in calendar.
+
+GitHub Actions runs all of these on every push and pull request.
 
 There are no runtime dependencies: plain JavaScript on Cloudflare Workers.
 

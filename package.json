@@ -1,6 +1,6 @@
 {
   "name": "fastmail-booking-calendar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A self-hosted booking page for your Fastmail calendar, running on Cloudflare Workers.",
   "private": true,
   "type": "module",
@@ -10,12 +10,17 @@
     "db:migrate": "wrangler d1 migrations apply DB --remote",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "deploy": "wrangler deploy",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:integration": "node --test --test-concurrency=1 test/integration/*.test.js",
+    "check": "wrangler deploy --dry-run --outdir .build -c wrangler.example.toml"
   },
   "devDependencies": {
     "wrangler": "^4.129.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
+  },
+  "overrides": {
+    "sharp": "^0.35.5"
   }
 }
