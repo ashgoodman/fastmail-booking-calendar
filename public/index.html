@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Book a time</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="card booking" id="app" aria-live="polite">
+  <p class="muted" id="loading">Loading…</p>
+</main>
+
+<template id="tpl-main">
+  <section class="intro">
+    <p class="eyebrow" data-host></p>
+    <h1 data-title></h1>
+    <ul class="facts">
+      <li data-duration></li>
+      <li data-location hidden></li>
+    </ul>
+    <p class="desc" data-desc hidden></p>
+  </section>
+  <section class="picker" data-picker>
+    <div class="cal">
+      <div class="cal-head">
+        <button type="button" class="icon" data-prev aria-label="Previous month">‹</button>
+        <h2 data-month></h2>
+        <button type="button" class="icon" data-next aria-label="Next month">›</button>
+      </div>
+      <div class="grid dow" aria-hidden="true"></div>
+      <div class="grid days" data-days role="grid"></div>
+      <label class="tz">Times shown in
+        <select data-tz></select>
+      </label>
+    </div>
+    <div class="times">
+      <h2 data-dayname>Pick a day</h2>
+      <div class="slot-list" data-slots></div>
+    </div>
+  </section>
+  <form class="details" data-form hidden novalidate>
+    <button type="button" class="link" data-back>← Change time</button>
+    <h2 data-chosen></h2>
+    <div data-fields></div>
+    <input type="text" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+    <p class="error" data-error hidden></p>
+    <button type="submit" class="primary" data-submit>Confirm booking</button>
+  </form>
+  <section class="done" data-done hidden>
+    <div class="tick" aria-hidden="true">✓</div>
+    <h2>You're booked</h2>
+    <p data-done-when></p>
+    <p class="muted" data-done-note></p>
+  </section>
+</template>
+
+<script>
+const $ = (sel, root = document) => root.querySelector(sel);
+const app = $('#app');
+const slug = decodeURIComponent(location.pathname.replace(/^\/+|\/+$/g, ''));
+const state = { config: null, slots: [], tz: Intl.DateTimeFormat().resolvedOptions().timeZone, month: null, day: null, slot: null };
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || `Request failed (${r.status})`), { status: r.status });
+  return j;
+}
+
+const dayKey = (iso, tz) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+const timeLabel = (iso, tz) => new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+const longDate = (key) => new Date(key + 'T12:00:00Z').toLocaleDateString(undefined, { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric' });
+const whenLabel = (iso, tz) => new Intl.DateTimeFormat(undefined, { timeZone: tz, weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+
+function closed(msg) {
+  app.innerHTML = '';
+  const h = document.createElement('h1'); h.textContent = state.config?.title || 'Bookings';
+  const p = document.createElement('p'); p.className = 'muted'; p.textContent = msg;
+  app.append(h, p);
+}
+
+// The landing page lists the meeting types; one type goes straight to its booking page.
+async function landing() {
+  const c = await api('/api/config');
+  if (c.types.length === 1) return location.replace('/' + encodeURIComponent(c.types[0].slug));
+  if (!c.types.length) return closed('Bookings are not open right now. Please check back later.');
+  document.title = c.hostName ? `Book time with ${c.hostName}` : 'Book a time';
+  app.innerHTML = '';
+  const intro = document.createElement('section');
+  intro.className = 'intro';
+  const eyebrow = document.createElement('p'); eyebrow.className = 'eyebrow'; eyebrow.textContent = c.hostName;
+  const h = document.createElement('h1'); h.textContent = 'Choose a meeting';
+  intro.append(eyebrow, h);
+  const list = document.createElement('div');
+  list.className = 'types';
+  for (const t of c.types) {
+    const a = document.createElement('a');
+    a.className = 'type-card';
+    a.href = '/' + encodeURIComponent(t.slug);
+    const title = document.createElement('strong'); title.textContent = t.title;
+    const meta = document.createElement('span'); meta.className = 'muted'; meta.textContent = `${t.durationMinutes} minutes${t.location ? ' · ' + t.location : ''}`;
+    a.append(title, meta);
+    if (t.description) { const d = document.createElement('span'); d.className = 'desc'; d.textContent = t.description; a.append(d); }
+    list.append(a);
+  }
+  app.append(intro, list);
+}
+
+async function load() {
+  try {
+    if (!slug) return await landing();
+    const [config, slots] = await Promise.all([api('/api/types/' + encodeURIComponent(slug)), api('/api/slots?type=' + encodeURIComponent(slug))]);
+    state.config = config;
+    document.title = config.title;
+    if (!slots.bookingEnabled) return closed('Bookings are not open right now. Please check back later.');
+    state.slots = slots.slots;
+    render();
+  } catch (e) {
+    closed(e.message);
+  }
+}
+
+function slotsByDay() {
+  const m = new Map();
+  for (const iso of state.slots) {
+    const k = dayKey(iso, state.tz);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(iso);
+  }
+  return m;
+}
+
+function render() {
+  const c = state.config;
+  app.innerHTML = '';
+  app.append($('#tpl-main').content.cloneNode(true));
+  $('[data-host]').textContent = c.hostName;
+  $('[data-title]').textContent = c.title;
+  $('[data-duration]').textContent = `${c.durationMinutes} minutes`;
+  if (c.location) { $('[data-location]').hidden = false; $('[data-location]').textContent = c.location; }
+  if (c.description) { $('[data-desc]').hidden = false; $('[data-desc]').textContent = c.description; }
+
+  const tzSel = $('[data-tz]');
+  const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [state.tz];
+  if (!zones.includes(state.tz)) zones.unshift(state.tz);
+  for (const z of zones) tzSel.add(new Option(z.replace(/_/g, ' '), z, false, z === state.tz));
+  tzSel.onchange = () => { state.tz = tzSel.value; state.day = null; drawCalendar(); drawTimes(); };
+
+  const dow = $('.dow');
+  const fmt = new Intl.DateTimeFormat(undefined, { weekday: 'narrow', timeZone: 'UTC' });
+  for (let i = 0; i < 7; i++) { const s = document.createElement('span'); s.textContent = fmt.format(new Date(Date.UTC(2024, 0, 7 + i))); dow.append(s); }
+
+  const byDay = slotsByDay();
+  const first = [...byDay.keys()].sort()[0];
+  state.month = (first || dayKey(new Date().toISOString(), state.tz)).slice(0, 7);
+  $('[data-prev]').onclick = () => shiftMonth(-1);
+  $('[data-next]').onclick = () => shiftMonth(1);
+  $('[data-back]').onclick = () => { $('[data-form]').hidden = true; $('[data-picker]').hidden = false; };
+  $('[data-form]').onsubmit = submit;
+  drawCalendar();
+  if (!first) $('[data-dayname]').textContent = 'No times are available right now.';
+}
+
+function shiftMonth(n) {
+  const [y, m] = state.month.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  state.month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  drawCalendar();
+}
+
+function drawCalendar() {
+  const byDay = slotsByDay();
+  const keys = [...byDay.keys()].sort();
+  const [y, m] = state.month.split('-').map(Number);
+  $('[data-month]').textContent = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(undefined, { timeZone: 'UTC', month: 'long', year: 'numeric' });
+  const minMonth = (keys[0] || state.month).slice(0, 7);
+  const maxMonth = (keys[keys.length - 1] || state.month).slice(0, 7);
+  $('[data-prev]').disabled = state.month <= minMonth;
+  $('[data-next]').disabled = state.month >= maxMonth;
+
+  const grid = $('[data-days]');
+  grid.innerHTML = '';
+  const lead = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  for (let i = 0; i < lead; i++) grid.append(document.createElement('span'));
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  for (let d = 1; d <= days; d++) {
+    const key = `${state.month}-${String(d).padStart(2, '0')}`;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = d;
+    b.className = 'day';
+    const has = byDay.has(key);
+    b.disabled = !has;
+    if (has) b.setAttribute('aria-label', `${longDate(key)}, ${byDay.get(key).length} times available`);
+    if (key === state.day) b.classList.add('selected'), b.setAttribute('aria-pressed', 'true');
+    b.onclick = () => { state.day = key; drawCalendar(); drawTimes(); };
+    grid.append(b);
+  }
+}
+
+function drawTimes() {
+  const list = $('[data-slots]');
+  list.innerHTML = '';
+  if (!state.day) { $('[data-dayname]').textContent = 'Pick a day'; return; }
+  $('[data-dayname]').textContent = longDate(state.day);
+  for (const iso of slotsByDay().get(state.day) || []) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'slot';
+    b.textContent = timeLabel(iso, state.tz);
+    b.onclick = () => choose(iso);
+    list.append(b);
+  }
+}
+
+function choose(iso) {
+  state.slot = iso;
+  $('[data-picker]').hidden = true;
+  const form = $('[data-form]');
+  form.hidden = false;
+  $('[data-chosen]').textContent = whenLabel(iso, state.tz);
+  $('[data-error]').hidden = true;
+  const box = $('[data-fields]');
+  if (!box.childElementCount) for (const f of state.config.fields) box.append(fieldEl(f));
+  box.querySelector('input,textarea,select')?.focus();
+}
+
+function fieldEl(f) {
+  const wrap = document.createElement('label');
+  wrap.className = f.type === 'checkbox' ? 'field check' : 'field';
+  const span = document.createElement('span');
+  span.textContent = f.label + (f.required ? '' : ' (optional)');
+  let input;
+  if (f.type === 'textarea') input = document.createElement('textarea');
+  else if (f.type === 'select') {
+    input = document.createElement('select');
+    input.add(new Option('Choose…', ''));
+    for (const o of f.options) input.add(new Option(o, o));
+  } else {
+    input = document.createElement('input');
+    input.type = f.type;
+    if (f.id === 'email') input.autocomplete = 'email';
+    if (f.id === 'name') input.autocomplete = 'name';
+  }
+  input.name = f.id;
+  input.required = f.required;
+  if (f.type === 'checkbox') wrap.append(input, span); else wrap.append(span, input);
+  return wrap;
+}
+
+async function submit(ev) {
+  ev.preventDefault();
+  const form = ev.target;
+  const err = $('[data-error]');
+  err.hidden = true;
+  const answers = {};
+  for (const f of state.config.fields) {
+    const el = form.elements[f.id];
+    answers[f.id] = f.type === 'checkbox' ? el.checked : el.value.trim();
+    if (f.required && !answers[f.id]) { err.textContent = `${f.label} is required.`; err.hidden = false; el.focus(); return; }
+  }
+  const btn = $('[data-submit]');
+  btn.disabled = true; btn.textContent = 'Booking…';
+  try {
+    const res = await api('/api/book', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: slug, start: state.slot, timezone: state.tz, answers, website: form.elements.website.value }),
+    });
+    form.hidden = true;
+    $('[data-done]').hidden = false;
+    $('[data-done-when]').textContent = whenLabel(state.slot, state.tz);
+    $('[data-done-note]').textContent = `A confirmation is on its way to ${answers.email}.`;
+    if (res.videoLink) {
+      const p = document.createElement('p');
+      const a = document.createElement('a');
+      a.href = res.videoLink; a.target = '_blank'; a.rel = 'noopener'; a.textContent = res.videoLink;
+      p.append('Your video call link: ', a);
+      $('[data-done]').append(p);
+    }
+  } catch (e) {
+    err.textContent = e.message; err.hidden = false;
+    if (e.status === 409) {
+      state.slots = state.slots.filter((s) => s !== state.slot);
+      const back = document.createElement('button');
+      back.type = 'button'; back.className = 'link'; back.textContent = 'Pick another time';
+      back.onclick = () => { form.hidden = true; $('[data-picker]').hidden = false; drawCalendar(); drawTimes(); };
+      err.append(' ', back);
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Confirm booking';
+  }
+}
+
+load();
+</script>
+</body>
+</html>

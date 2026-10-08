@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Booking settings</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .settings { max-width: 760px; }
+  .settings section { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+  .settings h2 { margin-bottom: 4px; }
+  .settings .hint { color: var(--muted); font-size: .9rem; margin: 0 0 14px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 16px; }
+  .day-row { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px dashed var(--line); align-items: start; }
+  .day-row:last-child { border-bottom: 0; }
+  .day-row strong { padding-top: 8px; }
+  .wins { display: flex; flex-direction: column; gap: 8px; }
+  .win { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+  .win input { flex: 1 1 0; width: 0; min-width: 0; max-width: 160px; }
+  .win .x { flex: none; }
+  .day-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 600px) { .day-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } .day-row strong { padding-top: 0; } }
+  .unavail { color: var(--muted); padding-top: 8px; }
+  .small { border: 1px solid var(--line); background: none; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: .9rem; color: inherit; text-decoration: none; display: inline-block; }
+  .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; padding: 4px 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { background: var(--accent-soft); border-radius: 999px; padding: 4px 4px 4px 12px; display: inline-flex; align-items: center; }
+  .checks label { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .q { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; display: grid; grid-template-columns: 1fr 140px auto auto; gap: 10px; align-items: center; }
+  .q .opts { grid-column: 1 / -1; }
+  .q label.req { display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+  @media (max-width: 600px) { .q { grid-template-columns: 1fr 1fr; } }
+  .radio label { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .radio input { margin-top: 5px; }
+  .bar { position: sticky; bottom: 0; background: var(--card); border-top: 1px solid var(--line); margin: 24px -28px -28px; padding: 14px 28px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; border-radius: 0 0 var(--radius) var(--radius); }
+  @media (max-width: 720px) { .bar { margin: 24px -20px -20px; padding: 14px 20px; } }
+  .status { flex: 1; min-width: 160px; }
+  .ok { color: var(--ok); }
+  .toggle { display: flex; gap: 10px; align-items: center; font-weight: 600; }
+  .share { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .share input { flex: 1; min-width: 200px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  td, th { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .banner { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; margin: 12px 0 0; }
+  .login { max-width: 420px; }
+  .tcard { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; display: grid; gap: 8px; }
+  .tcard.off { border-left-color: var(--line); }
+  .tcard-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .tcard-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { font-size: .78rem; font-weight: 600; border-radius: 999px; padding: 2px 8px; background: var(--line); color: var(--muted); }
+  .tokens { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
+  .token { border: 1px dashed var(--accent); color: var(--accent); background: none; border-radius: 999px; padding: 3px 10px; font-size: .85rem; cursor: pointer; }
+  .preview { background: var(--bg); border-radius: 8px; padding: 8px 12px; font-size: .92rem; white-space: pre-wrap; }
+  .back { margin-bottom: 8px; }
+  .slug { display: flex; align-items: center; gap: 0; }
+  .slug span { color: var(--muted); white-space: nowrap; padding-right: 4px; }
+  .slug input { flex: 1; min-width: 0; }
+</style>
+</head>
+<body>
+<main class="card settings" id="app"><p class="muted">Loading…</p></main>
+
+<script>
+const app = document.getElementById('app');
+const DAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri'], ['sat', 'Sat'], ['sun', 'Sun']];
+const QTYPES = [['text', 'Short text'], ['textarea', 'Long text'], ['email', 'Email'], ['tel', 'Phone'], ['select', 'Choice'], ['checkbox', 'Checkbox']];
+let key = '';
+let S = null;          // { config, calendars, identities, account, provider }
+let editing = null;    // index of the meeting type being edited, or null for the overview
+let dirty = false;
+
+try { key = localStorage.getItem('bookingAdminKey') || ''; } catch {}
+
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'class') el.className = v;
+    else if (v === true) el.setAttribute(k, '');
+    else if (v !== false && v != null) { if (k in el && k !== 'list') el[k] = v; else el.setAttribute(k, v); }
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
+  return el;
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', ...opts.headers } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || `Request failed (${r.status})`), { status: r.status });
+  return j;
+}
+
+function login(msg) {
+  app.className = 'card login';
+  const input = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Admin key' });
+  app.replaceChildren(
+    h('h1', {}, 'Booking settings'),
+    h('p', { class: 'muted' }, 'Enter the admin key for this booking server.'),
+    h('form', { onsubmit: (e) => { e.preventDefault(); key = input.value.trim(); start(); } },
+      h('div', { class: 'field' }, input),
+      msg ? h('p', { class: 'error' }, msg) : null,
+      h('button', { class: 'primary', type: 'submit' }, 'Open settings')),
+  );
+  input.focus();
+}
+
+async function start() {
+  if (!key) return login();
+  try {
+    S = await api('/api/admin/state');
+    try { localStorage.setItem('bookingAdminKey', key); } catch {}
+    app.className = 'card settings';
+    render();
+  } catch (e) {
+    if (e.status === 401) { try { localStorage.removeItem('bookingAdminKey'); } catch {} key = ''; return login('That key was not accepted.'); }
+    app.replaceChildren(h('h1', {}, 'Booking settings'), h('p', { class: 'error' }, e.message));
+  }
+}
+
+function touch() { dirty = true; const s = document.getElementById('status'); if (s) { s.textContent = 'Unsaved changes'; s.className = 'status muted'; } }
+
+// Two-way binds an input to obj[key].
+function bind(obj, k, el, cast = (v) => v, after) {
+  if (el.type === 'checkbox') el.checked = !!obj[k]; else el.value = obj[k] ?? '';
+  el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => {
+    obj[k] = el.type === 'checkbox' ? el.checked : cast(el.value);
+    touch();
+    after?.();
+  });
+  return el;
+}
+
+function field(label, control, hint) {
+  return h('label', { class: 'field' }, h('span', {}, label), control, hint ? h('small', { class: 'muted' }, hint) : null);
+}
+
+const num = (obj, k, min, max) => bind(obj, k, h('input', { type: 'number', min, max, step: 1, inputmode: 'numeric' }), Number);
+const linkFor = (t) => `${location.origin}/${t.slug}`;
+
+function slugify(s) {
+  return s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').slice(0, 40) || 'meeting';
+}
+
+function uniqueSlug(base, except) {
+  const taken = new Set(S.config.types.filter((t) => t !== except).map((t) => t.slug));
+  let s = base, n = 2;
+  while (taken.has(s)) s = `${base}-${n++}`;
+  return s;
+}
+
+function bar() {
+  return h('div', { class: 'bar' },
+    h('span', { id: 'status', class: 'status muted' }, dirty ? 'Unsaved changes' : 'All changes saved'),
+    h('button', { class: 'small', type: 'button', onclick: signOut }, 'Sign out'),
+    h('button', { class: 'primary', type: 'button', id: 'save', onclick: save }, 'Save'));
+}
+
+function render() {
+  if (editing != null && S.config.types[editing]) renderType(S.config.types[editing]);
+  else { editing = null; renderOverview(); }
+  window.scrollTo(0, 0);
+}
+
+// ---------- Overview: account-wide settings and the list of meeting types ----------
+
+function renderOverview() {
+  const c = S.config;
+  const zones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [c.timezone];
+  if (!zones.includes(c.timezone)) zones.unshift(c.timezone);
+  const tz = h('select');
+  for (const z of zones) tz.add(new Option(z.replace(/_/g, ' '), z));
+  const home = location.origin + '/';
+
+  app.replaceChildren(
+    h('h1', {}, 'Booking settings'),
+    h('p', { class: 'muted' }, S.account?.demo
+      ? 'Connected to the stand-in demo calendar. Bookings and emails are recorded here, nothing is really sent.'
+      : `Connected to ${S.provider === 'fastmail' ? 'Fastmail' : S.provider} as ${S.account?.email}.`),
+    h('label', { class: 'toggle' }, bind(c, 'bookingEnabled', h('input', { type: 'checkbox' })), 'Accept bookings'),
+    h('p', { class: 'hint' }, 'Turning this off closes every meeting type at once.'),
+    h('div', { class: 'share' }, h('input', { readonly: true, value: home, 'aria-label': 'Booking page link' }),
+      copyBtn(home), h('a', { class: 'small', href: home, target: '_blank', rel: 'noopener' }, 'Open')),
+    h('p', { class: 'hint', style: 'margin-top:6px' }, 'This page lists all your meeting types. Each type also has its own link below.'),
+
+    h('section', {},
+      h('h2', {}, 'Meeting types'),
+      h('p', { class: 'hint' }, 'Each type has its own length, hours, calendars, questions and link.'),
+      h('div', {}, c.types.map((t, i) => typeCard(t, i))),
+      h('button', { class: 'small', type: 'button', onclick: addType }, '+ Add meeting type')),
+
+    h('section', {},
+      h('h2', {}, 'About you'),
+      h('div', { class: 'row' },
+        field('Your name (shown to guests)', bind(c, 'hostName', h('input', { maxlength: 120 }))),
+        field('Your timezone', bind(c, 'timezone', tz), 'Hours for every meeting type are set in this timezone. Guests see their own.')),
+      h('h2', { style: 'margin-top:8px' }, 'Days off'),
+      h('p', { class: 'hint' }, 'No meeting type can be booked on these days.'),
+      h('div', { class: 'win' },
+        h('input', { type: 'date', id: 'blackout' }),
+        h('button', { class: 'small', type: 'button', onclick: addBlackout }, 'Add')),
+      h('div', { class: 'chips', id: 'blackouts' })),
+
+    h('section', {},
+      h('h2', {}, 'Upcoming bookings'),
+      h('div', { id: 'bookings' }, h('p', { class: 'muted' }, 'Loading…'))),
+
+    bar(),
+  );
+  drawBlackouts();
+  loadBookings();
+}
+
+function copyBtn(text) {
+  return h('button', { class: 'small', type: 'button', onclick: (e) => { navigator.clipboard?.writeText(text); e.target.textContent = 'Copied'; } }, 'Copy link');
+}
+
+function typeCard(t, i) {
+  const cal = S.calendars.find((x) => x.id === t.targetCalendar);
+  return h('div', { class: t.enabled ? 'tcard' : 'tcard off' },
+    h('div', { class: 'tcard-head' },
+      h('strong', {}, t.title || 'Untitled'),
+      t.enabled ? null : h('span', { class: 'badge' }, 'Off')),
+    h('span', { class: 'muted' }, `${t.durationMinutes} min · ${cal ? `goes on ${cal.name}` : 'no calendar chosen yet'}`),
+    h('span', { class: 'muted', style: 'word-break:break-all' }, linkFor(t)),
+    h('div', { class: 'tcard-actions' },
+      h('button', { class: 'small', type: 'button', onclick: () => { editing = i; render(); } }, 'Edit'),
+      copyBtn(linkFor(t)),
+      h('button', { class: 'small', type: 'button', onclick: () => duplicateType(i) }, 'Duplicate'),
+      S.config.types.length > 1 ? h('button', { class: 'small', type: 'button', onclick: () => deleteType(i) }, 'Delete') : null));
+}
+
+function newId() {
+  return 'type-' + Math.random().toString(36).slice(2, 10);
+}
+
+function addType() {
+  const base = S.config.types[0];
+  const t = JSON.parse(JSON.stringify(base));
+  Object.assign(t, { id: newId(), title: 'New meeting', slug: uniqueSlug('new-meeting'), description: '', enabled: false });
+  S.config.types.push(t);
+  editing = S.config.types.length - 1;
+  touch(); render();
+}
+
+function duplicateType(i) {
+  const t = JSON.parse(JSON.stringify(S.config.types[i]));
+  Object.assign(t, { id: newId(), title: `${t.title} (copy)`, slug: uniqueSlug(`${t.slug}-copy`), enabled: false });
+  S.config.types.splice(i + 1, 0, t);
+  editing = i + 1;
+  touch(); render();
+}
+
+function deleteType(i) {
+  if (!confirm(`Delete "${S.config.types[i].title}"? Existing bookings stay on your calendar.`)) return;
+  S.config.types.splice(i, 1);
+  touch(); render();
+}
+
+function addBlackout() {
+  const v = document.getElementById('blackout').value;
+  if (!v || S.config.blackoutDates.includes(v)) return;
+  S.config.blackoutDates.push(v);
+  S.config.blackoutDates.sort();
+  touch(); drawBlackouts();
+}
+
+function drawBlackouts() {
+  const box = document.getElementById('blackouts');
+  box.replaceChildren(...S.config.blackoutDates.map((d, i) => h('span', { class: 'chip' },
+    new Date(d + 'T12:00:00Z').toLocaleDateString(undefined, { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+    h('button', { class: 'x', type: 'button', 'aria-label': `Remove ${d}`, onclick: () => { S.config.blackoutDates.splice(i, 1); touch(); drawBlackouts(); } }, '✕'))));
+}
+
+// ---------- One meeting type ----------
+
+function renderType(t) {
+  const slugInput = bind(t, 'slug', h('input', { maxlength: 41, 'aria-label': 'Link' }), (v) => v.toLowerCase().replace(/[^a-z0-9-]/g, ''));
+  const titleInput = bind(t, 'title', h('input', { maxlength: 120 }), (v) => v, () => {
+    if (t._autoSlug) { t.slug = uniqueSlug(slugify(t.title), t); slugInput.value = t.slug; }
+    refreshTokens();
+  });
+  t._autoSlug = t.slug.startsWith('new-meeting');
+
+  app.replaceChildren(
+    h('button', { class: 'link back', type: 'button', onclick: () => { editing = null; render(); } }, '← All meeting types'),
+    h('h1', {}, t.title || 'Meeting type'),
+    h('label', { class: 'toggle' }, bind(t, 'enabled', h('input', { type: 'checkbox' })), 'This meeting type is bookable'),
+
+    h('section', {},
+      h('h2', {}, 'The meeting'),
+      field('Title', titleInput),
+      field('Link', h('div', { class: 'slug' }, h('span', {}, `${location.host}/`), slugInput), 'Lowercase letters, numbers and dashes.'),
+      field('Description', bind(t, 'description', h('textarea', { maxlength: 2000 }))),
+      field('Where', (() => {
+        const sel = h('select');
+        sel.add(new Option('A new Jitsi video link for every booking', 'jitsi'));
+        sel.add(new Option('Somewhere else (type it below)', 'none'));
+        return bind(t, 'video', sel, (v) => v, () => { const y = scrollY; renderType(t); scrollTo(0, y); });
+      })(), t.video === 'jitsi'
+        ? 'Each guest gets their own meet.jit.si link in their invite or email. Guests just click it; you sign in with Google, GitHub or Facebook to start the call.'
+        : null),
+      t.video === 'jitsi' ? null : field('Location', bind(t, 'location', h('input', { maxlength: 300, placeholder: 'e.g. a phone number, an address or a fixed meeting link' }))),
+      h('div', { class: 'row' },
+        field('Meeting length (minutes)', num(t, 'durationMinutes', 5, 480)),
+        field('Start times every (minutes)', num(t, 'slotStepMinutes', 5, 480)))),
+
+    h('section', {},
+      h('h2', {}, 'When people can book'),
+      h('p', { class: 'hint' }, `Weekly hours in your timezone (${S.config.timezone.replace(/_/g, ' ')}). Guests see times in their own timezone.`),
+      h('div', { id: 'weekly' }),
+      h('div', { class: 'row' },
+        field('Minimum notice (hours)', num(t, 'minNoticeHours', 0, 1440)),
+        field('How far ahead (days)', num(t, 'maxDaysAhead', 1, 90))),
+      h('div', { class: 'row' },
+        field('Free time before (minutes)', num(t, 'bufferBeforeMinutes', 0, 240)),
+        field('Free time after (minutes)', num(t, 'bufferAfterMinutes', 0, 240)),
+        field('Max of these per day', num(t, 'maxPerDay', 0, 100), '0 = no limit'))),
+
+    h('section', {},
+      h('h2', {}, 'Calendars'),
+      field('Put these bookings on', (() => {
+        const sel = h('select');
+        sel.add(new Option('Choose a calendar…', ''));
+        for (const cal of S.calendars.filter((x) => x.writable)) sel.add(new Option(cal.name, cal.id));
+        // Redraw so the chosen calendar drops out of the "also block" list below.
+        return bind(t, 'targetCalendar', sel, (v) => v, () => {
+          t.busyCalendars = t.busyCalendars.filter((x) => x !== t.targetCalendar);
+          const y = scrollY; renderType(t); scrollTo(0, y);
+        });
+      })(), 'This calendar is always checked for clashes too.'),
+      h('p', { class: 'hint', style: 'margin-top:8px' }, 'Also block times that are busy on:'),
+      h('div', { class: 'checks' }, S.calendars.filter((cal) => cal.id !== t.targetCalendar).map((cal) => {
+        const cb = h('input', { type: 'checkbox', checked: t.busyCalendars.includes(cal.id) });
+        cb.onchange = () => {
+          t.busyCalendars = cb.checked ? [...new Set([...t.busyCalendars, cal.id])] : t.busyCalendars.filter((x) => x !== cal.id);
+          touch();
+        };
+        return h('label', {}, cb, cal.name);
+      })),
+      h('p', { class: 'hint' }, 'Bookings from all your meeting types never overlap each other, whichever calendars they use.')),
+
+    h('section', {},
+      h('h2', {}, 'Questions for guests'),
+      h('p', { class: 'hint' }, 'Name and email are always asked: the confirmation needs them.'),
+      h('div', { id: 'questions' }),
+      h('button', { class: 'small', type: 'button', onclick: () => addQuestion(t) }, '+ Add question')),
+
+    h('section', {},
+      h('h2', {}, 'On your calendar'),
+      h('p', { class: 'hint' }, 'The title the booking gets in your calendar. Click a button to drop in the guest\'s details.'),
+      tokenField(t, 'eventTitle', h('input', { maxlength: 200 }), false)),
+
+    h('section', {},
+      h('h2', {}, 'Confirmation to the guest'),
+      h('div', { class: 'radio' },
+        radio(t, 'invite', 'Calendar invite', 'The guest gets an invite they can add to their calendar, sent from the address below.'),
+        radio(t, 'email', 'Confirmation email', 'The guest gets a plain email from the address below, with the message you write.')),
+      field('Send from', fromPicker(t)),
+      h('div', { id: 'message' })),
+
+    bar(),
+  );
+  drawWeekly(t);
+  drawQuestions(t);
+  drawMessage(t);
+}
+
+// A text field whose value can hold {placeholders}, with insert buttons and a live preview. The buttons
+// and preview follow the questions as they are added, renamed or removed.
+const tokenRefreshers = new Set();
+function refreshTokens() {
+  for (const fn of tokenRefreshers) fn();
+}
+
+function tokenField(t, k, el, withWhen) {
+  const box = h('div', { class: 'tokens' });
+  const preview = h('div', { class: 'preview' });
+  let sample = {};
+  function draw() {
+    const tokens = [['name', 'Guest name'], ['email', 'Guest email'], ['title', 'Meeting title']];
+    if (withWhen) tokens.push(['when', 'Date & time']);
+    if (withWhen && t.video === 'jitsi') tokens.push(['link', 'Video link']);
+    tokens.push(['host', 'Your name']);
+    for (const f of t.fields) if (!['name', 'email'].includes(f.id)) tokens.push([f.id, f.label.trim() || 'Untitled question']);
+    sample = { name: 'Jane Example', email: 'jane@example.com', title: t.title, host: S.config.hostName || 'You', when: 'Friday, October 9, 2026 at 10:00 AM (30 min)', link: 'https://meet.jit.si/Example-k3j9x2m4q1ab' };
+    for (const f of t.fields) if (!(f.id in sample)) sample[f.id] = f.type === 'checkbox' ? 'Yes' : `(their answer to "${f.label.trim() || 'Untitled question'}")`;
+    box.replaceChildren(h('span', { class: 'muted', style: 'font-size:.85rem' }, 'Insert:'),
+      ...tokens.map(([tok, label]) => h('button', { class: 'token', type: 'button', onclick: () => insert(tok) }, label)));
+    update();
+  }
+  function update() {
+    let text = (el.value || '').replace(/\{(\w+)\}/g, (m, x) => (x in sample ? sample[x] : m)) || '—';
+    if (withWhen && t.video === 'jitsi' && !(el.value || '').includes('{link}')) text += `\n\nJoin the video call: ${sample.link}`;
+    preview.textContent = text;
+  }
+  const insert = (tok) => {
+    const s = el.selectionStart ?? el.value.length, e = el.selectionEnd ?? el.value.length;
+    el.value = el.value.slice(0, s) + `{${tok}}` + el.value.slice(e);
+    el.focus();
+    const pos = s + tok.length + 2;
+    el.setSelectionRange(pos, pos);
+    el.dispatchEvent(new Event('input'));
+  };
+  bind(t, k, el, (v) => v, update);
+  const refresher = () => { if (!el.isConnected) tokenRefreshers.delete(refresher); else draw(); };
+  tokenRefreshers.add(refresher);
+  draw();
+  return h('div', { class: 'field' }, el, box, h('small', { class: 'muted' }, 'Preview with a sample guest:'), preview);
+}
+
+function radio(t, value, title, desc) {
+  const r = h('input', { type: 'radio', name: 'notify', value, checked: t.notify === value });
+  r.onchange = () => { t.notify = value; touch(); drawMessage(t); };
+  return h('label', {}, r, h('span', {}, h('strong', {}, title), h('br'), h('span', { class: 'muted' }, desc)));
+}
+
+function drawMessage(t) {
+  const box = document.getElementById('message');
+  box.replaceChildren();
+  if (t.notify !== 'email') return;
+  box.append(h('span', { class: 'field', style: 'margin-bottom:6px' }, h('span', {}, 'Message')),
+    tokenField(t, 'confirmationMessage', h('textarea', { rows: 6, maxlength: 4000 }), true));
+}
+
+// Exact sending addresses, plus wildcard identities (*@domain) where the owner types the address.
+function fromPicker(t) {
+  const exact = S.identities.filter((i) => !i.email.startsWith('*@') && i.email !== S.account?.email);
+  const wild = S.identities.filter((i) => i.email.startsWith('*@'));
+  const sel = h('select');
+  sel.add(new Option(`Account address${S.account?.email ? ` (${S.account.email})` : ''}`, ''));
+  for (const i of exact) sel.add(new Option(i.name ? `${i.name} <${i.email}>` : i.email, i.email));
+  for (const i of wild) sel.add(new Option(`Any address ${i.email.slice(1)} …`, i.email));
+  const custom = h('input', { type: 'text', inputmode: 'email', autocomplete: 'off', placeholder: 'name@domain', 'aria-label': 'Sending address' });
+  const wildFor = (addr) => wild.find((i) => addr.toLowerCase().endsWith(i.email.slice(1).toLowerCase()));
+  const show = () => { custom.hidden = !sel.value.startsWith('*@'); };
+  if (!t.fromAddress || exact.some((i) => i.email === t.fromAddress)) sel.value = t.fromAddress;
+  else if (wildFor(t.fromAddress)) { sel.value = wildFor(t.fromAddress).email; custom.value = t.fromAddress; }
+  sel.onchange = () => {
+    if (sel.value.startsWith('*@')) { custom.value = sel.value.slice(1); t.fromAddress = ''; custom.focus(); custom.setSelectionRange(0, 0); }
+    else t.fromAddress = sel.value;
+    show(); touch();
+  };
+  custom.oninput = () => { t.fromAddress = custom.value.trim(); touch(); };
+  show();
+  return h('div', { style: 'display:flex;flex-direction:column;gap:8px' }, sel, custom);
+}
+
+function drawWeekly(t) {
+  const box = document.getElementById('weekly');
+  box.replaceChildren(...DAYS.map(([d, label]) => {
+    const wins = t.weekly[d];
+    return h('div', { class: 'day-row' },
+      h('strong', {}, label),
+      h('div', { class: 'wins' },
+        wins.length ? wins.map((w, i) => h('div', { class: 'win' },
+          timeInput(w, 0), h('span', { class: 'muted' }, 'to'), timeInput(w, 1),
+          h('button', { class: 'x', type: 'button', 'aria-label': `Remove ${label} hours`, onclick: () => { wins.splice(i, 1); touch(); drawWeekly(t); } }, '✕'),
+        )) : h('span', { class: 'unavail' }, 'Unavailable'),
+        h('div', { class: 'day-actions' },
+          h('button', { class: 'small', type: 'button', onclick: () => {
+            const last = wins[wins.length - 1];
+            wins.push(last ? [last[1], last[1] < '23:00' ? `${String(+last[1].slice(0, 2) + 1).padStart(2, '0')}:00` : '24:00'] : ['09:00', '17:00']);
+            touch(); drawWeekly(t);
+          } }, '+ Add hours'),
+          wins.length ? h('button', { class: 'small', type: 'button', onclick: () => copyHours(t, d, WEEKDAYS) }, 'Copy to Mon–Fri') : null,
+          wins.length ? h('button', { class: 'small', type: 'button', onclick: () => copyHours(t, d, DAYS.map(([x]) => x)) }, 'Copy to all days') : null)));
+  }));
+}
+
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+
+// Gives every target day the same hours as `from` (other days are left alone).
+function copyHours(t, from, days) {
+  for (const d of days) if (d !== from) t.weekly[d] = t.weekly[from].map((w) => [...w]);
+  touch(); drawWeekly(t);
+}
+
+function timeInput(win, idx) {
+  const el = h('input', { type: 'time', value: win[idx] === '24:00' ? '23:59' : win[idx], step: 300 });
+  el.onchange = () => { win[idx] = el.value; touch(); };
+  return el;
+}
+
+function addQuestion(t) {
+  const ids = new Set(t.fields.map((f) => f.id));
+  let n = 1; while (ids.has(`question_${n}`)) n++;
+  t.fields.push({ id: `question_${n}`, label: '', type: 'text', required: false });
+  touch(); drawQuestions(t); refreshTokens();
+  document.querySelector('#questions .q:last-child input')?.focus();
+}
+
+function drawQuestions(t) {
+  const box = document.getElementById('questions');
+  box.replaceChildren(...t.fields.map((f, i) => {
+    const locked = f.id === 'name' || f.id === 'email';
+    const label = h('input', { value: f.label, placeholder: 'Question', 'aria-label': 'Question', maxlength: 200 });
+    label.oninput = () => { f.label = label.value; touch(); refreshTokens(); };
+    const type = h('select', { disabled: locked, 'aria-label': 'Answer type' });
+    for (const [v, txt] of QTYPES) type.add(new Option(txt, v, false, v === f.type));
+    type.onchange = () => { f.type = type.value; if (f.type === 'select' && !f.options) f.options = []; touch(); drawQuestions(t); refreshTokens(); };
+    const req = h('input', { type: 'checkbox', checked: f.required, disabled: locked });
+    req.onchange = () => { f.required = req.checked; touch(); };
+    const kids = [label, type, h('label', { class: 'req' }, req, 'Required'),
+      locked ? h('span', { class: 'muted' }, 'Always') :
+        h('button', { class: 'x', type: 'button', 'aria-label': 'Remove question', onclick: () => { t.fields.splice(i, 1); touch(); drawQuestions(t); refreshTokens(); } }, '✕')];
+    if (f.type === 'select') {
+      const opts = h('input', { value: (f.options || []).join(', '), placeholder: 'Choices, separated by commas' });
+      opts.oninput = () => { f.options = opts.value.split(',').map((s) => s.trim()).filter(Boolean); touch(); };
+      kids.push(h('div', { class: 'opts' }, opts));
+    }
+    return h('div', { class: 'q' }, kids);
+  }));
+}
+
+async function save() {
+  const status = document.getElementById('status');
+  const btn = document.getElementById('save');
+  btn.disabled = true; status.textContent = 'Saving…'; status.className = 'status muted';
+  try {
+    const body = JSON.parse(JSON.stringify(S.config, (k, v) => (k === '_autoSlug' ? undefined : v)));
+    const { config } = await api('/api/admin/config', { method: 'PUT', body: JSON.stringify(body) });
+    S.config = config; dirty = false;
+    render();
+    const s = document.getElementById('status');
+    s.textContent = 'Saved. Your booking pages use these settings now.'; s.className = 'status ok';
+  } catch (e) {
+    status.textContent = e.message; status.className = 'status error';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadBookings() {
+  const box = document.getElementById('bookings');
+  if (!box) return;
+  try {
+    const { bookings, outbox } = await api('/api/admin/bookings');
+    const fmt = new Intl.DateTimeFormat(undefined, { timeZone: S.config.timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const typeName = (id) => S.config.types.find((t) => t.id === id)?.title || '';
+    const kids = [];
+    kids.push(bookings.length ? h('table', {},
+      h('tr', {}, h('th', {}, 'When'), h('th', {}, 'Meeting'), h('th', {}, 'Who')),
+      bookings.map((b) => h('tr', {},
+        h('td', {}, fmt.format(new Date(b.start))),
+        h('td', {}, typeName(b.typeId), b.emailError ? h('div', { class: 'error' }, `Email failed: ${b.emailError}`) : null),
+        h('td', {}, b.answers.name, h('br'), h('span', { class: 'muted' }, b.answers.email))))) :
+      h('p', { class: 'muted' }, 'No upcoming bookings.'));
+    if (outbox?.length) {
+      kids.push(h('div', { class: 'banner' },
+        h('strong', {}, 'Demo outbox'), ' (what would have been sent)',
+        h('ul', {}, outbox.slice(0, 10).map((m) => h('li', {}, `${m.kind === 'invite' ? 'Invite' : 'Email'} to ${m.to} from ${m.from || 'account address'}: ${m.subject}`)))));
+    }
+    box.replaceChildren(...kids);
+  } catch (e) {
+    box.replaceChildren(h('p', { class: 'error' }, e.message));
+  }
+}
+
+function signOut() {
+  try { localStorage.removeItem('bookingAdminKey'); } catch {}
+  key = ''; login();
+}
+
+addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); });
+start();
+</script>
+</body>
+</html>

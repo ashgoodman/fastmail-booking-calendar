@@ -1,0 +1,8 @@
+# Your deployment settings (copy wrangler.example.toml to wrangler.toml)
+wrangler.toml
+
+# Local secrets and state
+.dev.vars
+.wrangler/
+node_modules/
+.DS_Store

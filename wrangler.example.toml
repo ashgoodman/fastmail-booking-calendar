@@ -1,0 +1,33 @@
+# Copy this file to wrangler.toml and fill in the two marked values.
+name = "fastmail-booking-calendar"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+# Optional: serve the booking pages on your own domain. The domain must be on Cloudflare.
+# routes = [{ pattern = "book.example.com", custom_domain = true }]
+
+[vars]
+# "fastmail" for real use; "demo" runs a stand-in calendar that sends nothing.
+PROVIDER = "fastmail"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fastmail-booking-calendar"
+database_id = "PASTE-YOUR-DATABASE-ID-HERE" # printed by: npx wrangler d1 create fastmail-booking-calendar
+migrations_dir = "migrations"
+
+# Per-visitor rate limits. The namespace ids only need to be unique within your Cloudflare account.
+[[ratelimits]]
+name = "SLOTS_LIMITER"
+namespace_id = "7301"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "BOOK_LIMITER"
+namespace_id = "7302"
+simple = { limit = 5, period = 60 }
