@@ -19,6 +19,7 @@ It runs on Cloudflare Workers and stays within Cloudflare's free plan for person
 - [Trying it without Fastmail](#trying-it-without-fastmail)
 - [Updating](#updating)
 - [Security and privacy](#security-and-privacy)
+- [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations)
 - [Development](#development)
 
@@ -292,6 +293,63 @@ npm run deploy
 - **Abuse limits.** Each visitor is rate-limited when loading times and when booking, and a hidden form field turns away simple bots.
 - **What's stored.** Your settings, plus a record of each booking: its time and the guest's answers. These are kept in your own Cloudflare D1 database. A booking you delete from your calendar is removed from it too.
 - **Keep secrets out of public repos.** `wrangler.toml` and `.dev.vars` are git-ignored, so they stay off GitHub if you fork this repository.
+
+## Troubleshooting
+
+**The settings page says "Something went wrong talking to the calendar: Fastmail rejected the app password"** (or "…the API token")
+- The credential was mistyped, revoked, or created with the wrong access.
+- Create a new one as described in [step 4](#4-create-two-fastmail-credentials), then store it again with `npx wrangler secret put FASTMAIL_APP_PASSWORD` (or `FASTMAIL_API_TOKEN`).
+- `FASTMAIL_USER` must be your Fastmail **login** address.
+
+**"That key was not accepted" on the settings page**
+- The admin key doesn't match the `ADMIN_KEY` secret. Set a new one with `npx wrangler secret put ADMIN_KEY`.
+
+**Guests see "Bookings are not open right now"**
+Check all three:
+- **Accept bookings** is ticked on the overview.
+- The meeting type is ticked **This meeting type is bookable**.
+- The meeting type has a calendar under **Put these bookings on**.
+
+Then click **Save**.
+
+**Guests see "No times are available right now"**
+Every possible time is ruled out. Check the meeting type's:
+- **weekly hours**,
+- **minimum notice** (for example, 48 hours of notice with a 2-day window leaves nothing),
+- **how far ahead**,
+- **days off**,
+- **max per day**,
+- whether the ticked calendars are busy across those hours. Remember that events marked "Free" in Fastmail don't count as busy.
+
+**Saving says "… is not one of your sending addresses"**
+- The **Send from** address must be one of the addresses your Fastmail account is set up to send from.
+- For a wildcard identity such as `*@example.com`, type the full address.
+
+**An invite or confirmation email didn't arrive**
+- **Check the guest's spam folder first.**
+- **Email mode:** a failed send shows as "Email failed: …" next to the booking under **Upcoming bookings**.
+- **Invite mode:** Fastmail sends the invite itself a few moments after the booking.
+- **Testing with your own addresses:** invites sent to an address on a domain your own Fastmail account also uses may not arrive. Test with an outside address, such as a Gmail account.
+
+**"That time was just taken" or "no longer available"**
+- Someone else booked it moments earlier, or it was blocked on your calendar after the page loaded.
+- The guest just picks another time. This is the double-booking protection working.
+
+**"Too many requests. Wait a minute and try again."**
+- One visitor loaded times or booked unusually often, so the rate limit applied.
+- It clears within a minute. You can adjust the limits under `[[ratelimits]]` in `wrangler.toml`.
+
+**`npx wrangler login` never completes**
+- This can happen when the browser can't reach the login callback, for example inside WSL or on a remote server.
+- Instead, create an API token in the Cloudflare dashboard (My Profile → API Tokens → "Edit Cloudflare Workers" template).
+- Then run commands with `CLOUDFLARE_API_TOKEN=<token> CLOUDFLARE_ACCOUNT_ID=<account id> npx wrangler …`.
+
+**My own domain doesn't load yet**
+- After adding a `routes` line and deploying, Cloudflare needs a minute or two to issue the certificate.
+- The domain must be on the same Cloudflare account.
+
+**Jitsi asks me to log in**
+- That's expected. On meet.jit.si, the host signs in with Google, GitHub or Facebook to start the call. Guests don't.
 
 ## Limitations
 
