@@ -15,7 +15,7 @@
     "check": "wrangler deploy --dry-run --outdir .build -c wrangler.example.toml"
   },
   "devDependencies": {
-    "wrangler": "^4.129.0"
+    "wrangler": "^4.156.0"
   },
   "engines": {
     "node": ">=22"
